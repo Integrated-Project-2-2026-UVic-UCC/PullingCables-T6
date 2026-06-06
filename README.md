@@ -60,7 +60,7 @@ The project has successfully concluded its testing and integration phase. **The 
 ### 5.1 Final Achievements
 * Successful assembly of the final prototype and all custom protective housings.
 * **Successful real-world flight testing with the drone**, confirming system reliability, payload stability, and the flawless operation of all mechanical and electrical features.
-* Final software logic—including the ESP-NOW communication protocol and the 2-second safety interlock mechanism—is highly robust and fully operational.
+* Final software logic including the ESP-NOW communication protocol and the 2-second safety interlock mechanism—is highly robust and fully operational.
 * Complete validation of the electrical control circuit and hardware failsafes.
 
 ---
