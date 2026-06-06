@@ -1,25 +1,25 @@
 /**
- * PROJECTE: Sistema de politja i ganxo per a dron
- * MÒDUL: Receptor (Integrat al xassís del dron)
- * DESCRIPCIÓ: Rep ordres de l'emissor via ESP-NOW i controla un pont en H amb
- * relés per moure el motor principal, a més d'un servomotor per a la pinça.
- * Inclou lògica d'enclavament de seguretat amb final de carrera magnètic.
+ * PROJECT: Drone Cable Routing Accessory
+ * MODULE: Receiver (Integrated in the drone housing)
+ * DESCRIPTION: Receives commands via ESP-NOW and controls an H-bridge via
+ * relays for the main motor, alongside a servo motor for the gripper.
+ * Includes a safety interlock logic with a magnetic limit switch.
  */
 
 #include <esp_now.h>
 #include <WiFi.h>
 #include <ESP32Servo.h>
 
-// --- CONFIGURACIÓ DE COMPONENTS ---
+// --- COMPONENT CONFIGURATION ---
 Servo pincaServo;
-const int pinServo = 1;  // Pin de senyal per al servomotor (Pinça)
+const int pinServo = 1;  // Signal pin for the servo motor (Gripper)
 
-const int releA = 9;     // Pin per al Relé A (Pujar/Enrotllar cable)
-const int releB = 8;     // Pin per al Relé B (Baixar/Desenrotllar cable)
+const int releA = 9;     // Pin for Relay A (Reel in / Up)
+const int releB = 8;     // Pin for Relay B (Reel out / Down)
 
-const int pinSensor = 2; // Pin per al Sensor Magnètic (Final de carrera)
+const int pinSensor = 2; // Pin for the Magnetic Sensor (Limit switch)
 
-// --- ESTRUCTURA DE DADES ---
+// --- DATA STRUCTURE ---
 typedef struct {
   bool motorA;
   bool motorB;
@@ -28,101 +28,101 @@ typedef struct {
 
 struct_message dadesRebudes;
 
-// --- VARIABLES D'ESTAT ---
+// --- STATE VARIABLES ---
 bool ordreMotorA = false;
 bool ordreMotorB = false;
 
-// Variables per gestionar l'enclavament de seguretat (Safety Interlock)
+// Variables to manage the safety interlock system
 bool estatBloqueigPujada = false;
 unsigned long tempsIniciBaixada = 0;
 bool baixantActualment = false;
 
-// --- FUNCIÓ DE RECEPCIÓ DE DADES ---
-// Directiva de compilació per mantenir compatibilitat amb versions v2 i v3 del core ESP32
+// --- DATA RECEPTION CALLBACK ---
+// Compilation directive to maintain compatibility with ESP32 core v2 and v3
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
 void alRebre(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
 #else
 void alRebre(const uint8_t *mac, const uint8_t *data, int len) {
 #endif
 
-  // Copiem la informació rebuda a la nostra estructura de dades
+  // Copy the received information into the local data structure
   memcpy(&dadesRebudes, data, sizeof(dadesRebudes));
   ordreMotorA = dadesRebudes.motorA;
   ordreMotorB = dadesRebudes.motorB;
 
-  // Accionament del servomotor de la pinça
+  // Gripper servo motor actuation
   if (dadesRebudes.pinca == true) {
-    pincaServo.write(70); // Grau d'obertura de la pinça
+    pincaServo.write(70); // Opening angle of the gripper
   } else {
-    pincaServo.write(0);  // Grau de tancament de la pinça
+    pincaServo.write(0);  // Closing angle of the gripper
   }
 }
 
 void setup() {
   Serial.begin(115200);
 
-  // Configuració de pins de sortida i entrada
+  // Configuration of input and output pins
   pinMode(releA, OUTPUT);
   pinMode(releB, OUTPUT);
-  pinMode(pinSensor, INPUT_PULLUP); // El sensor tanca a GND, per tant usem PULLUP
+  pinMode(pinSensor, INPUT_PULLUP); // Sensor shorts to GND, so PULLUP is used
 
-  // Garantim que els motors estiguin aturats a l'inici per seguretat
+  // Ensure motors are completely stopped at startup for safety
   digitalWrite(releA, LOW);
   digitalWrite(releB, LOW);
 
-  // Configuració del servomotor (Freqüència i polsos específics per a l'ESP32)
+  // Servo motor configuration (Specific frequency and pulses for ESP32)
   ESP32PWM::allocateTimer(0);
   pincaServo.setPeriodHertz(50);
   pincaServo.attach(pinServo, 500, 2400);
 
-  // Inicialització de la ràdio en mode Estació
+  // Initialize the radio in Station mode
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
 
   if (esp_now_init() != ESP_OK) {
-    Serial.println("Error inicialitzant ESP-NOW");
+    Serial.println("Error initializing ESP-NOW");
     return;
   }
 
-  // Vinculem la funció que s'executarà automàticament cada cop que arribin dades
+  // Bind the callback function that executes automatically when data arrives
   esp_now_register_recv_cb(alRebre);
 }
 
 void loop() {
-  // 1. LECTURA DEL FINAL DE CARRERA
-  // Si l'imant s'apropa al sensor, el pin cau a LOW i s'activa el bloqueig de seguretat
+  // 1. LIMIT SWITCH READING
+  // If the magnet approaches the sensor, the pin drops to LOW triggering the safety lock
   bool imantDetectat = (digitalRead(pinSensor) == LOW);
 
   if (imantDetectat) {
     estatBloqueigPujada = true;
   }
 
-  // 2. GESTIÓ DEL DESBLOQUEIG (Alliberament de 2 segons)
-  // Si estem demanant baixar, calculem quant de temps mantenim el botó premut.
-  // Això evita que el cable es quedi encallat al límit i obliga a crear un marge físic segur.
+  // 2. UNLOCK MANAGEMENT (2-second release clearance)
+  // If the down command is active, calculate how long the button is held.
+  // This prevents the cable from getting stuck at the limit and enforces a safe physical margin.
   if (ordreMotorB) {
     if (!baixantActualment) {
-      // Iniciem el cronòmetre de baixada
+      // Start the downward release timer
       baixantActualment = true;
       tempsIniciBaixada = millis();
     } else {
-      // Comprovem si ja hem superat els 2 segons de baixada ininterrompuda
+      // Check if the required 2 seconds of uninterrupted downward movement are met
       if (millis() - tempsIniciBaixada >= 2000) {
-        estatBloqueigPujada = false; // Lliurem el bloqueig
+        estatBloqueigPujada = false; // Release the safety lock
       }
     }
   } else {
-    // Si l'usuari deixa anar el botó abans de 2 segons, reiniciem el comptador
+    // If the user releases the button before 2 seconds, reset the timer
     baixantActualment = false;
   }
 
-  // 3. ACTUALITZACIÓ DEL PONT EN H (RELÉS)
+  // 3. H-BRIDGE UPDATE (RELAYS)
   if (estatBloqueigPujada) {
-    // Mode d'emergència: Bloquegem la pujada (Relé A) però permetem la baixada (Relé B)
+    // Emergency mode: Block upward movement (Relay A) but allow downward movement (Relay B)
     digitalWrite(releA, LOW);
     digitalWrite(releB, ordreMotorB ? HIGH : LOW);
   } else {
-    // Mode normal: Apliquem directament les ordres que arriben de l'emissor
+    // Normal mode: Directly apply the commands arriving from the transmitter
     digitalWrite(releA, ordreMotorA ? HIGH : LOW);
     digitalWrite(releB, ordreMotorB ? HIGH : LOW);
   }

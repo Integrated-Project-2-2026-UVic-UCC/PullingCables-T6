@@ -1,56 +1,56 @@
 /**
- * PROJECTE: Sistema de politja i ganxo per a dron
- * MÒDUL: Emissor (Comandament a distància)
- * DESCRIPCIÓ: Llegeix l'estat de 4 polsadors i envia les ordres de moviment 
- * i control de la pinça al receptor mitjançant el protocol ESP-NOW.
+ * PROJECT: Drone Cable Routing Accessory
+ * MODULE: Transmitter (Remote Control)
+ * DESCRIPTION: Reads the state of 4 pushbuttons and sends movement 
+ * and gripper control commands to the receiver via the ESP-NOW protocol.
  */
 
 #include <esp_now.h>
 #include <WiFi.h>
 
-// --- CONFIGURACIÓ DE XARXA ---
-// Adreça MAC de la placa receptora. S'ha de canviar si es canvia de placa.
+// --- NETWORK CONFIGURATION ---
+// MAC address of the receiver board. Must be updated if the board changes.
 uint8_t broadcastAddress[] = {0x8C, 0xBF, 0xEA, 0x8E, 0xDD, 0x6C}; 
 
-// --- DEFINICIÓ DE PINS ---
-const int pinB1 = 4;   // Polsador 1: Pujar cable (Enrotllar)
-const int pinB2 = 5;   // Polsador 2: Baixar cable (Desenrotllar)
-const int pinB3 = 6;   // Polsador 3: Obrir pinça
-const int pinB4 = 43;  // Polsador 4: Tancar pinça
+// --- PIN DEFINITION ---
+const int pinB1 = 4;   // Pushbutton 1: Reel in cable (Up)
+const int pinB2 = 5;   // Pushbutton 2: Reel out cable (Down)
+const int pinB3 = 6;   // Pushbutton 3: Open gripper
+const int pinB4 = 43;  // Pushbutton 4: Close gripper
 
-// --- ESTRUCTURA DE DADES ---
-// El paquet de dades ha de ser idèntic a l'emissor i al receptor
+// --- DATA STRUCTURE ---
+// The data packet structure must match exactly on both transmitter and receiver
 typedef struct {
-  bool motorA; // Estat del relé de pujada
-  bool motorB; // Estat del relé de baixada
-  bool pinca;  // Estat del servomotor de la pinça
+  bool motorA; // Upward relay state
+  bool motorB; // Downward relay state
+  bool pinca;  // Gripper servo state
 } struct_message;
 
 struct_message dades;
 bool estatPinca = false;
-unsigned long ultimDebounce = 0; // Variable per al control d'antirebots (debounce)
+unsigned long ultimDebounce = 0; // Variable for software debounce control
 
 void setup() {
   Serial.begin(115200);
 
-  // Configurem els pins dels botons amb resistència pull-up interna
-  // L'estat per defecte serà HIGH, i en prémer el botó serà LOW
+  // Configure button pins with internal pull-up resistors
+  // Default state is HIGH; pressing the button pulls it LOW
   pinMode(pinB1, INPUT_PULLUP);
   pinMode(pinB2, INPUT_PULLUP);
   pinMode(pinB3, INPUT_PULLUP);
   pinMode(pinB4, INPUT_PULLUP);
   
-  // Configurem el Wi-Fi en mode Estació (necessari per a ESP-NOW)
+  // Configure Wi-Fi in Station mode (required for ESP-NOW)
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
 
-  // Inicialitzem el protocol ESP-NOW
+  // Initialize the ESP-NOW protocol
   if (esp_now_init() != ESP_OK) {
-    Serial.println("Error inicialitzant ESP-NOW");
+    Serial.println("Error initializing ESP-NOW");
     return;
   }
   
-  // Registrem el dispositiu receptor (Peer)
+  // Register the receiver device (Peer)
   esp_now_peer_info_t peerInfo = {};
   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
   peerInfo.channel = 0;
@@ -59,12 +59,12 @@ void setup() {
 }
 
 void loop() {
-  // Llegeix l'estat dels botons de moviment continus
+  // Read the state of the continuous movement buttons
   bool estatB1 = (digitalRead(pinB1) == LOW);
   bool estatB2 = (digitalRead(pinB2) == LOW);
 
-  // Control de la pinça amb antirebots (250 ms de marge)
-  // Permet que una sola pulsació curta canviï l'estat sense fer lectures dobles
+  // Gripper control with debounce logic (250 ms margin)
+  // Ensures a single short press toggles the state without reading multiple inputs
   if (digitalRead(pinB3) == LOW && (millis() - ultimDebounce > 250)) {
     estatPinca = true;
     ultimDebounce = millis();
@@ -75,18 +75,18 @@ void loop() {
     ultimDebounce = millis();
   }
 
-  // Només enviem dades si hi ha hagut algun canvi en l'estat dels botons
-  // Això estalvia bateria i no satura la freqüència de ràdio
+  // Only transmit data if there is a state change in any button
+  // This saves battery life and prevents radio spectrum saturation
   if (dades.motorA != estatB1 || dades.motorB != estatB2 || dades.pinca != estatPinca) {
     dades.motorA = estatB1;
     dades.motorB = estatB2;
     dades.pinca = estatPinca;
     
-    // Enviem el paquet de dades cap al receptor
+    // Send the data packet to the receiver
     esp_now_send(broadcastAddress, (uint8_t *) &dades, sizeof(dades));
-    Serial.printf("Enviat -> MotorA:%d | MotorB:%d | Pinca:%d\n", dades.motorA, dades.motorB, dades.pinca);
+    Serial.printf("Sent -> MotorA:%d | MotorB:%d | Gripper:%d\n", dades.motorA, dades.motorB, dades.pinca);
   }
   
-  // Petita pausa per estabilitat del microcontrolador
+  // Short delay for microcontroller stability
   delay(10);
 }
