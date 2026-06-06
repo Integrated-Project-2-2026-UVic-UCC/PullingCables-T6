@@ -70,13 +70,10 @@ If you wish to build your own drone cable routing system, all the necessary reso
 
 ### 6.1 Mechanical Assembly
 * **3D Printing:** Navigate to the repository's design folders to find the CAD/STL files for the main drone housing, the remote control casing, the claw, and the pulley mechanism. Print these components using a durable material (e.g., PLA or PETG).
-* **Assembly:** Assemble the physical components utilizing standard metric screws and bearings as indicated in the mechanical folder.
+* **Assembly:** Assemble the physical components utilizing the mechanical diagrams as a guide.
 
 ### 6.2 Electronics Setup
-The system uses two XIAO ESP32-S3 microcontrollers:
-* **Transmitter (Remote Control):** Connect 4 pushbuttons to the microcontroller's GPIO pins (D3, D4, D5, D6), wiring the other side of each button to GND.
-* **Receiver (Drone Payload):** Connect a servo motor (Pin D0), an H-bridge relay module (Pins D9, D10) for the main motor, and a Littelfuse 59170 magnetic limit switch (Pin D1 to GND) to the second microcontroller. *(Note: The final code is optimized to run without external indicator LEDs to minimize weight and power consumption).*
-
+The system uses two XIAO ESP32-S3 microcontrollers and in the programs folder you will find the transmitter and receiver programs that clearly indicate how to connect all components.
 ### 6.3 Software Installation
 1. Open the Arduino IDE and ensure you have the ESP32 board manager installed.
 2. Flash the `Transmitter` code to the remote control board.
